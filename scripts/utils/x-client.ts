@@ -1,6 +1,6 @@
 /**
  * X（Twitter）API 薄封装：使用 OAuth 2.0 用户上下文（User Access Token / Bearer）。
- * 对外暴露采集（搜索、时间线、趋势）、发帖、发串等方法。
+ * 对外暴露采集（搜索、时间线）、发帖、发串等方法。
  * 额外能力：
  * 1) 支持从 .env 读取代理（HTTPS_PROXY/HTTP_PROXY）并强制走代理请求
  * 2) 支持 refresh token 刷新 access token 后，自动回写到 .env 持久化
@@ -8,7 +8,7 @@
 
 /* --------------------------------------------------------------------------
  * 依赖
- * - twitter-api-v2：官方风格的 Node 客户端，封装 v1 / v2 请求
+ * - twitter-api-v2：官方风格的 Node 客户端（本仓库仅使用 v2）
  * - https-proxy-agent：为 SDK 注入 httpAgent，确保请求走代理
  * - dotenv：加载项目根目录 .env（X_OAUTH2_*、X_CLIENT_* 等）
  * - fs/promises：刷新 token 后回写 .env（持久化）
@@ -109,7 +109,7 @@ async function resolveOAuth2AccessToken(): Promise<string> {
  * TwitterClient
  * - 内部持有 readWrite 子客户端：可调用需要「用户写权限」的 v2 接口（如发帖）
  * - 构造函数私有：外部请用 create() 或 fromAccessToken()，避免漏配令牌
- * - v1 趋势、v2 搜索/发帖等说明见各方法注释
+ * - 仅保留 v2 搜索/发帖/时间线能力
  * -------------------------------------------------------------------------- */
 export class TwitterClient {
   /** readWrite 子客户端：具备发推等写操作所需的 v1/v2 入口 */
@@ -126,11 +126,6 @@ export class TwitterClient {
     return new TwitterClient(
       new TwitterApi(accessToken, httpAgent ? { httpAgent } : undefined).readWrite,
     );
-  }
-
-  /* ----- v1：某地趋势（非推文正文）；部分应用在 OAuth 2.0 用户令牌下可能受限，失败可改用 search ----- */
-  async getTrendingTopics(woeid: number = 1) {
-    return await this.rw.v1.trendsByPlace(woeid);
   }
 
   /* ----- v2：近期搜索；返回含 data / includes 等，fetch-tweets 脚本会再取 .data 落盘 ----- */

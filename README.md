@@ -18,7 +18,7 @@ x-publisher/
 │   ├── preferences.json     # 兴趣词、规避主题、语言等（智能体喜好）
 │   └── style-templates.json # 各风格 prompt / 长度 / 表情开关
 ├── scripts/
-│   ├── fetch-tweets.ts      # ① 采集：search | timeline | trending
+│   ├── fetch-tweets.ts      # ① 采集：search | timeline
 │   ├── process-tweet.ts     # ② 加工：过滤 + 风格化
 │   ├── publish-tweet.ts     # ③ 发布单条（支持 --dry-run）
 │   └── utils/
@@ -45,7 +45,7 @@ flowchart LR
   S --> C
 ```
 
-1. **采集**（`fetch-tweets.ts`）：`search` / `timeline` 会把 v2 返回里的 **`data` 推文数组**写入 `data/cache/fetched-tweets.json`，可直接给下一步用。`trending` 为话题元数据，需再 `search` 才能得到推文数组。
+1. **采集**（`fetch-tweets.ts`）：`search` / `timeline` 会把 v2 返回里的 **`data` 推文数组**写入时间分目录（如 `data/cache/fetched-tweets/20260408-183522.json`），可直接给下一步用。
 2. **加工**（`process-tweet.ts`）：按 `preferences` 过滤，再按 `style-templates` 与 `-s` 风格生成 `processedText`。
 3. **发布**（`publish-tweet.ts`）：读取加工结果，默认发 `--index 0`；建议先发 `--dry-run` 检查正文。
 

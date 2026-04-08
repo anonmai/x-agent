@@ -1,7 +1,7 @@
 ---
 name: x-intelligent-publisher
 description: >-
-  Fetches tweets from X (search/timeline/trends), filters and rewrites by
+  Fetches tweets from X (search/timeline), filters and rewrites by
   preferences and style templates, then posts. Use for OpenClaw X 自动发帖、推文流水线。
 metadata:
   openclaw:
@@ -22,9 +22,8 @@ metadata:
 
 ## 1. 采集
 
-- **推荐**：`search` 得到可加工的推文数组（写入 `data/cache/fetched-tweets.json`）。
+- **推荐**：`search` 得到可加工的推文数组（写入时间分目录，如 `data/cache/fetched-tweets/20260408-183522.json`）。
 - `timeline`：同上，需 `--user` 为**数字用户 ID**。
-- `trending`：返回趋势话题结构，**不是**推文数组；要加工需再根据话题用 `search` 采推文。
 
 ```bash
 npx tsx scripts/fetch-tweets.ts --source search --topic "AI -is:retweet lang:en" --count 20
@@ -52,7 +51,7 @@ npx tsx scripts/publish-tweet.ts -i data/cache/processed-tweets.json --index 0 -
 
 在 `.env` 中配置 **`X_OAUTH2_ACCESS_TOKEN`**（用户授权得到的 Bearer access token，需包含发帖/读推等对应 scope）。也可不填 access token，改为配置 **`X_CLIENT_ID`** + **`X_OAUTH2_REFRESH_TOKEN`**（授权时含 `offline.access`），保密应用另配 **`X_CLIENT_SECRET`**，运行时会先刷新再请求。
 
-OAuth 2.0 用户上下文主要面向 **API v2**；`trending` 走 v1，若平台返回认证错误，请改用 `search` 采集。
+本仓库仅使用 **API v2**（`search` / `timeline` / 发帖）。
 
 ## 与 Clawbird 的关系
 

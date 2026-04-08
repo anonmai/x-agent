@@ -26,21 +26,23 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /* --------------------------------------------------------------------------
  * 命令行配置：定义可选/默认参数，再解析 process.argv
- * - source：从哪采（趋势 / 搜索 / 某用户时间线）
+ * - source：从哪采（搜索 / 某用户时间线）
  * - count：条数（传给 API 的期望数量，实际以平台限制为准）
  * - topic：搜索关键词（仅 search 需要）
  * - user：用户 ID（仅 timeline 需要）
  * -------------------------------------------------------------------------- */
 const program = new Command();
 program
-  .option('-s, --source <type>', '数据源: trending/search/timeline', 'trending')
+  .option('-s, --source <type>', '数据源: search/timeline', 'search')
   .option('-c, --count <number>', '获取数量', '20')
   .option('-t, --topic <string>', '搜索关键词')
   .option('-u, --user <string>', '用户ID（用于timeline）')
   .parse(process.argv);
-
 const options = program.opts();
 
+/* --------------------------------------------------------------------------
+ * 查找网络连接失败的可能原因
+ * -------------------------------------------------------------------------- */
 type NetworkLikeError = {
   code?: string;
   errno?: string;
@@ -69,6 +71,16 @@ function logNetworkHint(error: unknown) {
   );
 }
 
+function buildTimestampDirName(date = new Date()): string {
+  const yyyy = String(date.getFullYear());
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  const hh = String(date.getHours()).padStart(2, '0');
+  const min = String(date.getMinutes()).padStart(2, '0');
+  const ss = String(date.getSeconds()).padStart(2, '0');
+  return `${yyyy}${mm}${dd}-${hh}${min}${ss}`;
+}
+
 /* --------------------------------------------------------------------------
  * 主流程（异步）
  * 1. 用环境变量里的 OAuth 2.0 配置创建 X 客户端
@@ -87,9 +99,6 @@ async function main() {
     /* ----- 根据数据源调用不同接口，结果先放在 raw（类型未知，因三种返回结构不同）----- */
     let raw: unknown;
     switch (options.source) {
-      case 'trending':
-        raw = await client.getTrendingTopics();
-        break;
       case 'search':
         if (!options.topic) {
           throw new Error('搜索模式需要指定 --topic 参数');
@@ -115,24 +124,26 @@ async function main() {
         raw = await client.getUserTimeline(options.user, Math.min(100, Math.max(5, safeCount)));
         break;
       default:
-        throw new Error(`未知的数据源: ${options.source}`);
+        throw new Error(`未知的数据源: ${options.source}（仅支持 search/timeline）`);
     }
 
     /* ----- 规范化要写入磁盘的结构 -----
      * v2 的 search / userTimeline 返回对象里，推文列表在 .data 里；
-     * 加工脚本期望「推文数组」，所以这里取出 data；trending 则整包保存（话题结构）。
+     * 加工脚本期望「推文数组」，所以这里统一取出 data。
      * `as { data?: unknown[] }` 是类型断言：告诉 TypeScript raw 上可能有 data 字段。
      * -------------------------------------------------------------------------- */
-    const toStore =
-      options.source === 'search' || options.source === 'timeline'
-        ? (raw as { data?: unknown[] }).data ?? []
-        : raw;
+    const toStore = (raw as { data?: unknown[] }).data ?? [];
 
-    /* ----- 写入 data/cache/fetched-tweets.json -----
+    /* ----- 按采集时间分目录写入 -----
+     * 例如：data/cache/fetched-tweets/20260408-183522/fetched-tweets.json
      * mkdir(..., { recursive: true })：父目录不存在则逐级创建
      * JSON.stringify(..., null, 2)：格式化成带缩进的 JSON 字符串
      * -------------------------------------------------------------------------- */
-    const outputPath = path.join(__dirname, '../data/cache/fetched-tweets.json');
+    const timestampDir = buildTimestampDirName();
+    const outputPath = path.join(
+      __dirname,
+      `../data/cache/fetched-tweets/${timestampDir}.json`,
+    );
     await fs.mkdir(path.dirname(outputPath), { recursive: true });
     await fs.writeFile(outputPath, JSON.stringify(toStore, null, 2));
 
@@ -140,7 +151,7 @@ async function main() {
     logger.success(`✅ 已写入 ${outputPath}（条目数: ${n}）`);
   } catch (error) {
     logger.error('❌ 采集失败:', error);
-    logNetworkHint(error);
+    //logNetworkHint(error);
     process.exit(1);
   }
 }

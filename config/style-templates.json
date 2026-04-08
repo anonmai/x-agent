@@ -1,0 +1,26 @@
+{
+  "professional": {
+    "tone": "专业",
+    "maxLength": 260,
+    "useEmoji": false,
+    "prompt": "将素材改写成简洁、专业的中文短评，保留要点，不加标题，不超过 260 字，不用表情。"
+  },
+  "casual": {
+    "tone": "轻松",
+    "maxLength": 260,
+    "useEmoji": true,
+    "prompt": "用轻松口语化中文重写，可适当用 1～2 个表情，不超过 260 字。"
+  },
+  "humorous": {
+    "tone": "幽默",
+    "maxLength": 260,
+    "useEmoji": true,
+    "prompt": "用幽默但不冒犯的语气改写，中文，不超过 260 字。"
+  },
+  "thread": {
+    "tone": "串推",
+    "maxLength": 400,
+    "useEmoji": false,
+    "prompt": "将素材改写成一条完整中文推文（本技能发布脚本仅发单条），不超过 270 字，语气专业。"
+  }
+}

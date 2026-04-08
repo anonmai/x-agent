@@ -1,0 +1,29 @@
+{
+  "id": "x-intelligent-publisher",
+  "name": "X 自动发帖",
+  "version": "1.0.0",
+  "description": "采集 X 推文 → 按偏好与风格加工 → 发布。依赖官方 X API（OAuth 2.0 用户上下文）与可选 OpenAI。",
+  "skills": ["."],
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "oauth2AccessToken": {
+        "type": "string",
+        "description": "OAuth 2.0 User Access Token（Bearer）"
+      },
+      "clientId": {
+        "type": "string",
+        "description": "OAuth 2.0 Client ID（与 refresh token 联用）"
+      },
+      "clientSecret": {
+        "type": "string",
+        "description": "OAuth 2.0 Client Secret（保密应用）"
+      },
+      "oauth2RefreshToken": {
+        "type": "string",
+        "description": "OAuth 2.0 Refresh Token（需 offline.access）"
+      }
+    }
+  }
+}

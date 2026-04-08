@@ -1,0 +1,26 @@
+# 依赖与构建
+node_modules/
+dist/
+*.tsbuildinfo
+
+# 环境变量与密钥（勿提交）
+.env
+.env.*
+!.env.example
+
+# 运行时缓存与日志
+data/
+*.log
+npm-debug.log*
+
+# 测试与覆盖率
+coverage/
+.nyc_output/
+
+# 操作系统
+.DS_Store
+Thumbs.db
+
+# 编辑器（按需取消注释）
+.vscode/
+.idea/

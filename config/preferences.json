@@ -1,0 +1,24 @@
+{
+  "interests": [
+    "AI",
+    "Machine Learning",
+    "Web Development",
+    "TypeScript",
+    "Open Source",
+    "Developer Tools"
+  ],
+  "avoidTopics": [
+    "Politics",
+    "Religion",
+    "Cryptocurrency Scam",
+    "NSFW"
+  ],
+  "preferredAccounts": [
+    "@OpenAI",
+    "@typescript",
+    "@vercel",
+    "@github",
+    "@deno_land"
+  ],
+  "language": "zh-CN"
+}

@@ -1,0 +1,27 @@
+{
+  "id": "x-intelligent-publisher",
+  "name": "x自动发帖智能体",
+  "description": "自动收集资料，生成推文并发布到平台X上。",
+  "version": "1.0.0",
+  "author": "Bai",
+  "type": "script",
+  "license": "Apache-2.0",
+  "private": true,
+  "tags": ["X", "推特", "自动化", "发帖"],
+  "user-invocable": true,
+  "disable-model-invocation": false,
+  "triggers": ["X", "推文", "发帖"],
+  "permissions": {
+    "network_access": true,
+    "file_system": "read_write",
+    "browser_automation": false,
+    "environment_variables": true,
+    "shell_exec": true,
+    "clipboard_access": false,
+    "notification": true
+  },
+  "requires": {
+    "bins": ["node"],
+    "os": ["darwin", "linux", "win32"]
+  }
+}

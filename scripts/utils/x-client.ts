@@ -1,25 +1,73 @@
 /**
  * X（Twitter）API 薄封装：使用 OAuth 2.0 用户上下文（User Access Token / Bearer）。
- * 对外暴露采集（搜索、时间线、趋势）、发帖、发串等方法；令牌从环境变量解析。
+ * 对外暴露采集（搜索、时间线、趋势）、发帖、发串等方法。
+ * 额外能力：
+ * 1) 支持从 .env 读取代理（HTTPS_PROXY/HTTP_PROXY）并强制走代理请求
+ * 2) 支持 refresh token 刷新 access token 后，自动回写到 .env 持久化
  */
 
 /* --------------------------------------------------------------------------
  * 依赖
  * - twitter-api-v2：官方风格的 Node 客户端，封装 v1 / v2 请求
+ * - https-proxy-agent：为 SDK 注入 httpAgent，确保请求走代理
  * - dotenv：加载项目根目录 .env（X_OAUTH2_*、X_CLIENT_* 等）
+ * - fs/promises：刷新 token 后回写 .env（持久化）
  * - path / url：在 ESM 模块中计算 __dirname，以便定位 ../../.env
  * -------------------------------------------------------------------------- */
 import { TwitterApi, TwitterApiReadWrite } from 'twitter-api-v2';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import dotenv from 'dotenv';
+import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-dotenv.config({ path: path.join(__dirname, '../../.env') });
+const envPath = path.join(__dirname, '../../.env');
+dotenv.config({ path: envPath });
 
+/* --------------------------------------------------------------------------
+ * 代理配置
+ * - 优先读取 HTTPS_PROXY，其次 HTTP_PROXY
+ * - 若存在代理地址，则给 twitter-api-v2 注入 httpAgent（强制走代理）
+ * -------------------------------------------------------------------------- */
 const proxyUrl = process.env.HTTPS_PROXY?.trim() || process.env.HTTP_PROXY?.trim();
 const httpAgent = proxyUrl ? new HttpsProxyAgent(proxyUrl) : undefined;
+
+/* --------------------------------------------------------------------------
+ * 将最新 token 回写到 .env
+ * - 更新或新增 X_OAUTH2_ACCESS_TOKEN
+ * - 如果刷新接口返回了新的 refresh token，则更新或新增 X_OAUTH2_REFRESH_TOKEN
+ * - 这样下次进程重启后仍能使用最新 token，避免反复过期
+ * -------------------------------------------------------------------------- */
+async function persistTokensToEnv(accessToken: string, refreshToken?: string) {
+  let content = '';
+  try {
+    content = await fs.readFile(envPath, 'utf-8');
+  } catch {
+    // .env 不存在时创建新内容
+  }
+
+  const lines = content ? content.split(/\r?\n/) : [];
+  let hasAccess = false;
+  let hasRefresh = false;
+
+  const nextLines = lines.map((line) => {
+    if (line.startsWith('X_OAUTH2_ACCESS_TOKEN=')) {
+      hasAccess = true;
+      return `X_OAUTH2_ACCESS_TOKEN=${accessToken}`;
+    }
+    if (line.startsWith('X_OAUTH2_REFRESH_TOKEN=')) {
+      hasRefresh = true;
+      if (refreshToken) return `X_OAUTH2_REFRESH_TOKEN=${refreshToken}`;
+    }
+    return line;
+  });
+
+  if (!hasAccess) nextLines.push(`X_OAUTH2_ACCESS_TOKEN=${accessToken}`);
+  if (refreshToken && !hasRefresh) nextLines.push(`X_OAUTH2_REFRESH_TOKEN=${refreshToken}`);
+
+  await fs.writeFile(envPath, nextLines.join('\n'), 'utf-8');
+}
 
 
 /* --------------------------------------------------------------------------
@@ -27,6 +75,7 @@ const httpAgent = proxyUrl ? new HttpsProxyAgent(proxyUrl) : undefined;
  * 1) 若已配置 X_OAUTH2_ACCESS_TOKEN，直接返回（最常见）
  * 2) 否则若配置了 X_CLIENT_ID + X_OAUTH2_REFRESH_TOKEN，调用 refreshOAuth2Token 换新 access
  *    （保密应用需同时配置 X_CLIENT_SECRET；公开应用可只配 clientId）
+ *    刷新成功后会把新 token 回写 .env，并同步到当前 process.env
  * 3) 以上都不满足则抛错，提示用户检查 .env
  * -------------------------------------------------------------------------- */
 async function resolveOAuth2AccessToken(): Promise<string> {
@@ -41,7 +90,13 @@ async function resolveOAuth2AccessToken(): Promise<string> {
       clientSecret ? { clientId, clientSecret } : { clientId },
       httpAgent ? { httpAgent } : undefined,
     );
-    const { accessToken } = await base.refreshOAuth2Token(refreshToken);
+    const { accessToken, refreshToken: nextRefreshToken } =
+      await base.refreshOAuth2Token(refreshToken);
+    // 刷新成功后将 token 持久化，避免下次启动继续使用旧值
+    await persistTokensToEnv(accessToken, nextRefreshToken);
+    // 同步更新当前进程环境变量，确保本次运行立即生效
+    process.env.X_OAUTH2_ACCESS_TOKEN = accessToken;
+    if (nextRefreshToken) process.env.X_OAUTH2_REFRESH_TOKEN = nextRefreshToken;
     return accessToken;
   }
 

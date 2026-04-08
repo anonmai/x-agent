@@ -1,4 +1,4 @@
-# x-publisher — OpenClaw X 自动发帖技能
+﻿# x-publisher — OpenClaw X 自动发帖技能
 
 基于官方 **X API** 的最小流水线：**采集** → **按偏好与风格加工** → **发帖**。可选 **OpenAI** 做文风改写；无 Key 时使用简单规则降级。
 
@@ -59,6 +59,7 @@ flowchart LR
 | `X_CLIENT_ID` | OAuth 2.0 Client ID |
 | `X_CLIENT_SECRET` | 保密（Confidential）应用必填；公开（Public）应用可省略 |
 | `X_OAUTH2_REFRESH_TOKEN` | 与 `CLIENT_ID` 配合，在无 access token 时自动刷新 |
+| `HTTPS_PROXY` / `HTTP_PROXY` | 可选：代理地址；配置后 SDK 会强制走代理请求 X API |
 
 在 [X Developer Portal](https://developer.x.com) 启用 OAuth 2.0，授权时勾选发帖、读推等所需 scope（如 `tweet.read`、`tweet.write`、`users.read` 等）。`scripts/utils/x-client.ts` 内通过 `TwitterClient.create()` 解析令牌并创建 `readWrite` 客户端。
 
@@ -72,12 +73,6 @@ npx tsx scripts/process-tweet.ts -i data/cache/fetched-tweets.json -s profession
 npx tsx scripts/publish-tweet.ts -i data/cache/processed-tweets.json --dry-run
 ```
 
-## 本次结构调整说明
-
-- 已删除根目录误放的 **`config.json`**（原内容为其他 Python/爬虫项目，与本技能无关）。
-- **`skill.json`** 的 `requires.bins` 已与实现一致改为 **`node`**，并允许通过环境变量注入密钥。
-- 根目录 **`SKILL.md`** 作为 OpenClaw 可读技能入口；**`openclaw.plugin.json`** 声明 `skills: ["."]`，与同仓库 **clawbird** 的接入方式一致。
-
 ## 许可
 
-见 `skill.json` 中的 `license` 字段。
+Apache-2.0

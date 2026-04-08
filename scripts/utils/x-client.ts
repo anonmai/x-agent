@@ -11,7 +11,6 @@
  * -------------------------------------------------------------------------- */
 import { TwitterApi, TwitterApiReadWrite } from 'twitter-api-v2';
 import { HttpsProxyAgent } from 'https-proxy-agent';
-import { SocksProxyAgent } from 'socks-proxy-agent';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -19,22 +18,9 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.join(__dirname, '../../.env') });
 
-const proxyUrl =
-  process.env.HTTPS_PROXY?.trim() ||
-  process.env.HTTP_PROXY?.trim() ||
-  process.env.ALL_PROXY?.trim() ||
-  process.env.SOCKS_PROXY?.trim();
+const proxyUrl = process.env.HTTPS_PROXY?.trim() || process.env.HTTP_PROXY?.trim();
+const httpAgent = proxyUrl ? new HttpsProxyAgent(proxyUrl) : undefined;
 
-function buildHttpAgent(url?: string) {
-  if (!url) return undefined;
-  const lower = url.toLowerCase();
-  if (lower.startsWith('socks://') || lower.startsWith('socks5://') || lower.startsWith('socks4://')) {
-    return new SocksProxyAgent(url);
-  }
-  return new HttpsProxyAgent(url);
-}
-
-const httpAgent = buildHttpAgent(proxyUrl);
 
 /* --------------------------------------------------------------------------
  * 从环境变量解析「当前可用的 OAuth 2.0 Access Token」

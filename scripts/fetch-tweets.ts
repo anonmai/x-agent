@@ -29,14 +29,14 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
  * - source：从哪采（搜索 / 某用户时间线）
  * - count：条数（传给 API 的期望数量，实际以平台限制为准）
  * - topic：搜索关键词（仅 search 需要）
- * - user：用户 ID（仅 timeline 需要）
+ * - user：timeline 用：数字用户 ID，或 @用户名 / 用户名（会调 v2 查 ID）
  * -------------------------------------------------------------------------- */
 const program = new Command();
 program
   .option('-s, --source <type>', '数据源: search/timeline', 'search')
   .option('-c, --count <number>', '获取数量', '20')
   .option('-t, --topic <string>', '搜索关键词')
-  .option('-u, --user <string>', '用户ID（用于timeline）')
+  .option('-u, --user <string>', 'timeline：用户数字ID 或 @用户名')
   .parse(process.argv);
 const options = program.opts();
 
@@ -69,6 +69,20 @@ function logNetworkHint(error: unknown) {
   logger.warn(
     '若持续失败，请检查代理是否可用（端口监听/认证/放行 api.x.com:443）。',
   );
+}
+
+async function resolveTimelineUserId(
+  client: TwitterClient,
+  userArg: string,
+): Promise<string> {
+  const s = userArg.trim();
+  if (/^\d+$/.test(s)) return s;
+  const username = s.replace(/^@/, '');
+  const res = await client.userByUsername(username);
+  const id = res.data?.id;
+  if (!id) throw new Error(`未找到用户: ${username}`);
+  logger.info(`已解析 @${username} → 用户 ID: ${id}`);
+  return id;
 }
 
 function buildTimestampDirName(date = new Date()): string {
@@ -113,7 +127,7 @@ async function main() {
         break;
       case 'timeline':
         if (!options.user) {
-          throw new Error('Timeline 模式需要指定 --user 参数');
+          throw new Error('Timeline 模式需要指定 --user 参数（数字 ID 或 @用户名）');
         }
         // v2 user timeline: max_results 取值范围通常是 [5, 100]
         if (safeCount < 5 || safeCount > 100) {
@@ -121,7 +135,13 @@ async function main() {
             `timeline 模式下 --count=${safeCount} 非法，已自动调整到 5（允许范围 5~100）`,
           );
         }
-        raw = await client.getUserTimeline(options.user, Math.min(100, Math.max(5, safeCount)));
+        {
+          const userId = await resolveTimelineUserId(client, options.user);
+          raw = await client.getUserTimeline(
+            userId,
+            Math.min(100, Math.max(5, safeCount)),
+          );
+        }
         break;
       default:
         throw new Error(`未知的数据源: ${options.source}（仅支持 search/timeline）`);

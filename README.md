@@ -69,6 +69,8 @@ flowchart LR
 cp .env.example .env   # 填写 OAuth 2.0 变量；可选 OPENAI_API_KEY
 npm install
 npx tsx scripts/fetch-tweets.ts --source search --topic "TypeScript -is:retweet" --count 15
+# timeline：--user 可为数字 ID，或 @用户名（需 users.read）
+# npx tsx scripts/fetch-tweets.ts --source timeline --user @openclaw --count 10
 npx tsx scripts/process-tweet.ts -i data/cache/fetched-tweets.json -s professional
 npx tsx scripts/publish-tweet.ts -i data/cache/processed-tweets.json --dry-run
 ```

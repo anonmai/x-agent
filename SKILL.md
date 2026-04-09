@@ -23,7 +23,7 @@ metadata:
 ## 1. 采集
 
 - **推荐**：`search` 得到可加工的推文数组（写入时间分目录，如 `data/cache/fetched-tweets/20260408-183522.json`）。
-- `timeline`：同上，需 `--user` 为**数字用户 ID**。
+- `timeline`：需 `--user`，可为**数字用户 ID**，或 **`@用户名` / 用户名**（脚本会调用 v2 解析 ID，需 `users.read`）。
 
 ```bash
 npx tsx scripts/fetch-tweets.ts --source search --topic "AI -is:retweet lang:en" --count 20

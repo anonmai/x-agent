@@ -183,7 +183,16 @@ export class TwitterClient {
     });
   }
 
-  /* ----- v2：指定用户 ID 的时间线（非用户名；用户名需先查 ID）----- */
+  /* ----- v2：按用户名查用户（需 users.read scope）----- */
+  async userByUsername(username: string) {
+    return await this.withAuthRetry(async () =>
+      this.rw.v2.userByUsername(username.replace(/^@/, ''), {
+        'user.fields': ['id', 'name', 'username'],
+      }),
+    );
+  }
+
+  /* ----- v2：指定用户数字 ID 的时间线 ----- */
   async getUserTimeline(userId: string, count: number = 20) {
     return await this.withAuthRetry(async () =>
       await this.rw.v2.userTimeline(userId, {

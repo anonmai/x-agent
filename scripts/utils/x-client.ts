@@ -78,9 +78,9 @@ async function persistTokensToEnv(accessToken: string, refreshToken?: string) {
  *    刷新成功后会把新 token 回写 .env，并同步到当前 process.env
  * 3) 以上都不满足则抛错，提示用户检查 .env
  * -------------------------------------------------------------------------- */
-async function resolveOAuth2AccessToken(): Promise<string> {
+async function resolveOAuth2AccessToken(forceRefresh = false): Promise<string> {
   const direct = process.env.X_OAUTH2_ACCESS_TOKEN?.trim();
-  if (direct) return direct;
+  if (direct && !forceRefresh) return direct;
 
   const refreshToken = process.env.X_OAUTH2_REFRESH_TOKEN?.trim();
   const clientId = process.env.X_CLIENT_ID?.trim();
@@ -113,7 +113,30 @@ async function resolveOAuth2AccessToken(): Promise<string> {
  * -------------------------------------------------------------------------- */
 export class TwitterClient {
   /** readWrite 子客户端：具备发推等写操作所需的 v1/v2 入口 */
-  private constructor(private readonly rw: TwitterApiReadWrite) {}
+  private constructor(private rw: TwitterApiReadWrite) {}
+
+  /**
+   * 401 自动兜底：当 access token 失效时，尝试 refresh 并重试一次。
+   * 仅重试一次，避免错误配置导致无限循环。
+   */
+  private async withAuthRetry<T>(fn: () => Promise<T>): Promise<T> {
+    try {
+      return await fn();
+    } catch (error) {
+      const status = (error as { code?: number })?.code;
+      const canRefresh =
+        Boolean(process.env.X_CLIENT_ID?.trim()) &&
+        Boolean(process.env.X_OAUTH2_REFRESH_TOKEN?.trim());
+      if (status !== 401 || !canRefresh) throw error;
+
+      const newAccessToken = await resolveOAuth2AccessToken(true);
+      this.rw = new TwitterApi(
+        newAccessToken,
+        httpAgent ? { httpAgent } : undefined,
+      ).readWrite;
+      return await fn();
+    }
+  }
 
   /* ----- 异步工厂：先 resolveOAuth2AccessToken()，再构造实例 ----- */
   static async create(): Promise<TwitterClient> {
@@ -130,38 +153,52 @@ export class TwitterClient {
 
   /* ----- v2：近期搜索；返回含 data / includes 等，fetch-tweets 脚本会再取 .data 落盘 ----- */
   async searchTweets(query: string, count: number = 20) {
-    const result = await this.rw.v2.search(query, {
-      max_results: count,
-      'tweet.fields': ['created_at', 'public_metrics', 'author_id'],
-      expansions: ['author_id'],
-      'user.fields': ['username', 'name', 'profile_image_url'],
+    return await this.withAuthRetry(async () => {
+      const result = await this.rw.v2.search(query, {
+        max_results: count,
+        'tweet.fields': ['created_at', 'public_metrics', 'author_id'],
+        expansions: ['author_id'],
+        'user.fields': ['username', 'name', 'profile_image_url'],
+      });
+      return result;
     });
-    return result;
   }
 
   /* ----- v2：发单条推文 ----- */
   async postTweet(text: string) {
-    return await this.rw.v2.tweet(text);
+    return await this.withAuthRetry(async () => await this.rw.v2.tweet(text));
   }
 
   /* ----- v2：发串推——除第一条外，后续每条作为上一条的 reply，形成线程 ----- */
   async postThread(tweets: string[]) {
-    let lastTweetId: string | undefined;
-
-    for (const text of tweets) {
-      const result = await this.rw.v2.tweet(
-        text,
-        lastTweetId ? { reply: { in_reply_to_tweet_id: lastTweetId } } : {},
-      );
-      lastTweetId = result.data.id;
-    }
+    await this.withAuthRetry(async () => {
+      let lastTweetId: string | undefined;
+      for (const text of tweets) {
+        const result = await this.rw.v2.tweet(
+          text,
+          lastTweetId ? { reply: { in_reply_to_tweet_id: lastTweetId } } : {},
+        );
+        lastTweetId = result.data.id;
+      }
+    });
   }
 
   /* ----- v2：指定用户 ID 的时间线（非用户名；用户名需先查 ID）----- */
   async getUserTimeline(userId: string, count: number = 20) {
-    return await this.rw.v2.userTimeline(userId, {
-      max_results: count,
-      'tweet.fields': ['created_at', 'public_metrics'],
-    });
+    return await this.withAuthRetry(async () =>
+      await this.rw.v2.userTimeline(userId, {
+        max_results: count,
+        'tweet.fields': ['created_at', 'public_metrics'],
+      }),
+    );
+  }
+
+  /* ----- v2：读取当前登录用户信息（用于诊断 token/scope）----- */
+  async getMe() {
+    return await this.withAuthRetry(async () =>
+      await this.rw.v2.me({
+        'user.fields': ['id', 'name', 'username'],
+      }),
+    );
   }
 }

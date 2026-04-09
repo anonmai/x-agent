@@ -12,7 +12,7 @@
 | 鉴权与客户端 | `scripts/x-client.ts` | `createAppOnlyClient()`（搜索）、`TwitterClient.create()`（发帖/用户态） |
 | 搜索推文 | `scripts/tools/search-tweets.ts` | recent/all 搜索封装（App-only）+ 测试落盘 |
 | 趋势获取 | `scripts/tools/get-trends.ts` | `GET /2/trends/by/woeid/{woeid}` |
-| 发帖 | `scripts/tools/creat-post.ts` | `createPost(...)`（User Context） |
+| 发帖 | `scripts/tools/create-post.ts` | `createPost(...)`（User Context） |
 | 趋势采集流水线 | `scripts/find-trend.ts` | 美国 Top1 趋势 -> 搜索 10 条 -> 写缓存 |
 | 宿主模型编排器 | `scripts/pipeline.ts` | `--collect` 生成模型输入，`--publish --text` 发布 |
 
@@ -38,7 +38,7 @@ x-publisher/
 │   └── tools/
 │       ├── search-tweets.ts
 │       ├── get-trends.ts
-│       └── creat-post.ts
+│       └── create-post.ts
 └── data/
     └── cache/
 ```
@@ -90,7 +90,7 @@ npm install
 
 - 搜索测试：`npx tsx scripts/tools/search-tweets.ts`
 - 趋势测试：`npx tsx scripts/tools/get-trends.ts`
-- 发帖测试：`npx tsx scripts/tools/creat-post.ts`
+- 发帖测试：`npx tsx scripts/tools/create-post.ts`
 - 趋势采集+缓存：`npx tsx scripts/find-trend.ts`
 
 ---

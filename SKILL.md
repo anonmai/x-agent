@@ -1,5 +1,5 @@
 ---
-name: x-intelligent-publisher
+name: x-publisher
 description: >-
   OpenClaw-hosted auto publishing skill for X API v2. Search uses App-only Bearer;
   posting uses OAuth 2.0 User Context. Summary generation must use host model ability.
@@ -26,7 +26,7 @@ metadata:
 - **`scripts/x-client.ts`**：`createAppOnlyClient()`（搜索用 App-only Bearer）；`TwitterClient.create()`（User Context，401 refresh 回写 `.env`）。
 - **`scripts/find-trend.ts`**：获取美国 Top1 趋势并抓取 10 条推文，写入缓存。
 - **`scripts/pipeline.ts`**：两段式编排器（collect -> host model summarize -> publish）。
-- **`scripts/tools/creat-post.ts`**：`createPost(...)` 发帖能力（User Context）。
+- **`scripts/tools/create-post.ts`**：`createPost(...)` 发帖能力（User Context）。
 
 ## 身份验证
 

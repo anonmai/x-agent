@@ -13,7 +13,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { findUsTopTrendAndSave } from './find-trend.js';
 import { TwitterClient } from './x-client.js';
-import { createPost } from './tools/creat-post.js';
+import { createPost } from './tools/create-post.js';
 
 type TweetCandidate = {
   id?: string;

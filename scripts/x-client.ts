@@ -15,10 +15,14 @@
  */
 
 import { TwitterApi, TwitterApiReadWrite } from 'twitter-api-v2';
+import type { IClientSettings, ITwitterApiBeforeRequestHookArgs, ITwitterApiClientPlugin } from 'twitter-api-v2';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import dotenv from 'dotenv';
 import fs from 'fs/promises';
+import { Agent as HttpsAgent } from 'https';
+import type { RequestOptions as HttpsRequestOptions } from 'https';
 import path from 'path';
+import { rootCertificates } from 'tls';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -28,7 +32,73 @@ dotenv.config({ path: envPath });
 // 全局代理：优先 HTTPS_PROXY，再回退 HTTP_PROXY。
 // 注入到 twitter-api-v2 后，所有请求会统一经过该代理出口。
 const proxyUrl = process.env.HTTPS_PROXY?.trim() || process.env.HTTP_PROXY?.trim();
-const httpAgent = proxyUrl ? new HttpsProxyAgent(proxyUrl) : undefined;
+const httpAgent = proxyUrl
+  ? new HttpsProxyAgent(proxyUrl, { ca: [...rootCertificates] })
+  : new HttpsAgent({ ca: [...rootCertificates] });
+
+/**
+ * twitter-api-v2 通过插件暴露了底层 requestOptions；
+ * 在这里把 Node 内置根证书显式注入每个请求，保证 TLS 验证稳定。
+ */
+const injectNodeRootCAPlugin = {
+  onBeforeRequest({ requestOptions }: ITwitterApiBeforeRequestHookArgs) {
+    const tlsRequestOptions = requestOptions as HttpsRequestOptions;
+    tlsRequestOptions.ca = [...rootCertificates];
+  },
+} satisfies ITwitterApiClientPlugin;
+
+/**
+ * 统一组装 twitter-api-v2 的请求选项。
+ *
+ * 为什么显式传 `ca`：
+ * - 在某些本机/代理环境下，Node 默认 CA 选择会导致
+ *   `UNABLE_TO_GET_ISSUER_CERT_LOCALLY`（证书链无法本地验证）；
+ * - 显式使用 Node 内置根证书可让校验路径稳定，避免 Search API 在 TLS 握手阶段失败。
+ */
+function createTwitterApiOptions(): Partial<IClientSettings> {
+  return {
+    httpAgent,
+    plugins: [injectNodeRootCAPlugin],
+  };
+}
+
+type AuthErrorLike = {
+  code?: number;
+  data?: {
+    error?: string;
+    error_description?: string;
+  };
+};
+
+/**
+ * 判断错误是否属于“当前 access token 不可用”。
+ * 除了常见 401，还兼容 X API 返回 400 + invalid_request/token invalid 的场景。
+ */
+function isInvalidAccessTokenError(error: unknown): boolean {
+  const e = error as AuthErrorLike;
+  if (e.code === 401) return true;
+  if (e.code !== 400) return false;
+  if (e.data?.error !== 'invalid_request') return false;
+  const detail = e.data?.error_description?.toLowerCase() ?? '';
+  return detail.includes('token') && detail.includes('invalid');
+}
+
+/**
+ * 轻量探活：验证 access token 是否还能访问用户态 v2 接口。
+ * - true: 可用，直接继续业务请求
+ * - false: 不可用，走 refresh 流程
+ * - throw: 非鉴权类失败（如网络异常），交给上层处理
+ */
+async function canUseAccessToken(accessToken: string): Promise<boolean> {
+  try {
+    const probeClient = new TwitterApi(accessToken, createTwitterApiOptions());
+    await probeClient.v2.me();
+    return true;
+  } catch (error) {
+    if (isInvalidAccessTokenError(error)) return false;
+    throw error;
+  }
+}
 
 /**
  * 将 refresh 后的新 token 持久化到 `.env`。
@@ -84,22 +154,37 @@ async function persistTokensToEnv(accessToken: string, refreshToken?: string) {
  */
 async function resolveOAuth2AccessToken(forceRefresh = false): Promise<string> {
   const direct = process.env.X_OAUTH2_ACCESS_TOKEN?.trim();
-  if (direct && !forceRefresh) return direct;
+  let directTokenRejected = false;
+  if (direct && !forceRefresh) {
+    if (await canUseAccessToken(direct)) return direct;
+    directTokenRejected = true;
+    // 直连 token 不可用时自动回退到 refresh 路径。
+  }
 
   const refreshToken = process.env.X_OAUTH2_REFRESH_TOKEN?.trim();
   const clientId = process.env.X_CLIENT_ID?.trim();
   if (refreshToken && clientId) {
-    const clientSecret = process.env.X_CLIENT_SECRET?.trim();
-    const base = new TwitterApi(
-      clientSecret ? { clientId, clientSecret } : { clientId },
-      httpAgent ? { httpAgent } : undefined,
-    );
-    const { accessToken, refreshToken: nextRefreshToken } =
-      await base.refreshOAuth2Token(refreshToken);
-    await persistTokensToEnv(accessToken, nextRefreshToken);
-    process.env.X_OAUTH2_ACCESS_TOKEN = accessToken;
-    if (nextRefreshToken) process.env.X_OAUTH2_REFRESH_TOKEN = nextRefreshToken;
-    return accessToken;
+    try {
+      const clientSecret = process.env.X_CLIENT_SECRET?.trim();
+      const base = new TwitterApi(
+        clientSecret ? { clientId, clientSecret } : { clientId },
+        createTwitterApiOptions(),
+      );
+      const { accessToken, refreshToken: nextRefreshToken } =
+        await base.refreshOAuth2Token(refreshToken);
+      await persistTokensToEnv(accessToken, nextRefreshToken);
+      process.env.X_OAUTH2_ACCESS_TOKEN = accessToken;
+      if (nextRefreshToken) process.env.X_OAUTH2_REFRESH_TOKEN = nextRefreshToken;
+      return accessToken;
+    } catch (error) {
+      if (directTokenRejected || forceRefresh) {
+        throw new Error(
+          '当前 X_OAUTH2_ACCESS_TOKEN 已失效，且使用 X_OAUTH2_REFRESH_TOKEN 刷新失败。请重新完成 OAuth 授权并更新 .env 中的 token。',
+          { cause: error },
+        );
+      }
+      throw error;
+    }
   }
 
   throw new Error(
@@ -132,7 +217,7 @@ function resolveAppOnlyBearerToken(): string {
  */
 export function createAppOnlyClient(): TwitterApi {
   const appBearer = resolveAppOnlyBearerToken();
-  return new TwitterApi(appBearer, httpAgent ? { httpAgent } : undefined);
+  return new TwitterApi(appBearer, createTwitterApiOptions());
 }
 
 export class TwitterClient {
@@ -158,10 +243,7 @@ export class TwitterClient {
       if (status !== 401 || !canRefresh) throw error;
 
       const newAccessToken = await resolveOAuth2AccessToken(true);
-      this.rw = new TwitterApi(
-        newAccessToken,
-        httpAgent ? { httpAgent } : undefined,
-      ).readWrite;
+      this.rw = new TwitterApi(newAccessToken, createTwitterApiOptions()).readWrite;
       return await run();
     }
   }
@@ -183,7 +265,7 @@ export class TwitterClient {
   /** 使用外部已获取的 access token 直接构建 User Context 客户端。 */
   static fromAccessToken(accessToken: string): TwitterClient {
     return new TwitterClient(
-      new TwitterApi(accessToken, httpAgent ? { httpAgent } : undefined).readWrite,
+      new TwitterApi(accessToken, createTwitterApiOptions()).readWrite,
     );
   }
 }

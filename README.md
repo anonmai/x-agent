@@ -1,80 +1,107 @@
-﻿# x-publisher — OpenClaw X 自动发帖技能
+# x-publisher
 
-基于官方 **X API** 的最小流水线：**采集** → **按偏好与风格加工** → **发帖**。可选 **OpenAI** 做文风改写；无 Key 时使用简单规则降级。
+面向 OpenClaw 的 X 自动化技能项目：  
+**搜索走 App-only Bearer**，**发帖走 OAuth 2.0 User Context**，并支持“宿主模型自动总结 -> 自动发布”的两段式编排。
 
-## 目录结构
+---
+
+## 1. 当前能力
+
+| 模块 | 路径 | 作用 |
+|------|------|------|
+| 鉴权与客户端 | `scripts/x-client.ts` | `createAppOnlyClient()`（搜索）、`TwitterClient.create()`（发帖/用户态） |
+| 搜索推文 | `scripts/tools/search-tweets.ts` | recent/all 搜索封装（App-only）+ 测试落盘 |
+| 趋势获取 | `scripts/tools/get-trends.ts` | `GET /2/trends/by/woeid/{woeid}` |
+| 发帖 | `scripts/tools/creat-post.ts` | `createPost(...)`（User Context） |
+| 趋势采集流水线 | `scripts/find-trend.ts` | 美国 Top1 趋势 -> 搜索 10 条 -> 写缓存 |
+| 宿主模型编排器 | `scripts/pipeline.ts` | `--collect` 生成模型输入，`--publish --text` 发布 |
+
+---
+
+## 2. 目录结构
 
 ```text
 x-publisher/
-├── SKILL.md                 # OpenClaw 技能说明（frontmatter + 使用步骤）
-├── skill.json               # 技能清单（权限、触发词、运行环境等）
-├── openclaw.plugin.json     # 指向本目录为技能包（skills: ["."]）
-├── README.md                # 本文件
-├── package.json             # Node 依赖与 npm scripts
-├── tsconfig.json            # TypeScript（ESM + Node 类型）
-├── .env.example             # 环境变量模板
+├── README.md
+├── SKILL.md
+├── skill.json
+├── openclaw.plugin.json
+├── package.json
+├── package-lock.json
+├── tsconfig.json
+├── .env.example
 ├── .gitignore
-├── config/
-│   ├── preferences.json     # 兴趣词、规避主题、语言等（智能体喜好）
-│   └── style-templates.json # 各风格 prompt / 长度 / 表情开关
 ├── scripts/
-│   ├── fetch-tweets.ts      # ① 采集：search | timeline
-│   ├── process-tweet.ts     # ② 加工：过滤 + 风格化
-│   ├── publish-tweet.ts     # ③ 发布单条（支持 --dry-run）
-│   └── utils/
-│       ├── x-client.ts      # twitter-api-v2 封装
-│       ├── style-engine.ts  # 偏好过滤 + OpenAI/规则改写
-│       └── logger.ts
+│   ├── x-client.ts
+│   ├── pipeline.ts
+│   ├── find-trend.ts
+│   └── tools/
+│       ├── search-tweets.ts
+│       ├── get-trends.ts
+│       └── creat-post.ts
 └── data/
-    └── cache/               # 运行时生成（已 .gitignore），存放 fetched / processed JSON
+    └── cache/
 ```
 
-## 项目框架（数据流）
+---
 
-```mermaid
-flowchart LR
-  A[X API 采集] --> B[fetched-tweets.json]
-  B --> C[StyleEngine]
-  C --> D[processed-tweets.json]
-  D --> E[X API 发帖]
-  subgraph cfg [配置]
-    P[preferences.json]
-    S[style-templates.json]
-  end
-  P --> C
-  S --> C
-```
-
-1. **采集**（`fetch-tweets.ts`）：`search` / `timeline` 会把 v2 返回里的 **`data` 推文数组**写入时间分目录（如 `data/cache/fetched-tweets/20260408-183522.json`），可直接给下一步用。
-2. **加工**（`process-tweet.ts`）：按 `preferences` 过滤，再按 `style-templates` 与 `-s` 风格生成 `processedText`。
-3. **发布**（`publish-tweet.ts`）：读取加工结果，默认发 `--index 0`；建议先发 `--dry-run` 检查正文。
-
-## 身份验证（OAuth 2.0）
-
-本仓库的 X 请求使用 **OAuth 2.0 User Context**（与 OAuth 1.0a 的 API Key + Access Token / Secret 不同）。
-
-| 变量 | 说明 |
-|------|------|
-| `X_OAUTH2_ACCESS_TOKEN` | 用户授权后的 Access Token（Bearer），**推荐** |
-| `X_CLIENT_ID` | OAuth 2.0 Client ID |
-| `X_CLIENT_SECRET` | 保密（Confidential）应用必填；公开（Public）应用可省略 |
-| `X_OAUTH2_REFRESH_TOKEN` | 与 `CLIENT_ID` 配合，在无 access token 时自动刷新 |
-| `HTTPS_PROXY` / `HTTP_PROXY` | 可选：代理地址；配置后 SDK 会强制走代理请求 X API |
-
-在 [X Developer Portal](https://developer.x.com) 启用 OAuth 2.0，授权时勾选发帖、读推等所需 scope（如 `tweet.read`、`tweet.write`、`users.read` 等）。`scripts/utils/x-client.ts` 内通过 `TwitterClient.create()` 解析令牌并创建 `readWrite` 客户端。
-
-## 快速开始
+## 3. 环境准备
 
 ```bash
-cp .env.example .env   # 填写 OAuth 2.0 变量；可选 OPENAI_API_KEY
+cp .env.example .env
 npm install
-npx tsx scripts/fetch-tweets.ts --source search --topic "TypeScript -is:retweet" --count 15
-# timeline：--user 可为数字 ID，或 @用户名（需 users.read）
-# npx tsx scripts/fetch-tweets.ts --source timeline --user @openclaw --count 10
-npx tsx scripts/process-tweet.ts -i data/cache/fetched-tweets.json -s professional
-npx tsx scripts/publish-tweet.ts -i data/cache/processed-tweets.json --dry-run
 ```
 
-## 许可
+必需变量（详见 `.env.example`）：
+
+| 变量 | 用途 |
+|------|------|
+| `X_APP_BEARER_TOKEN` | 搜索/趋势（App-only） |
+| `X_OAUTH2_ACCESS_TOKEN` | 发帖（User Context） |
+| `X_CLIENT_ID` / `X_CLIENT_SECRET` / `X_OAUTH2_REFRESH_TOKEN` | User Context 刷新兜底 |
+| `HTTPS_PROXY` / `HTTP_PROXY` | 可选代理 |
+
+---
+
+## 4. 自动化执行（宿主模型）
+
+本项目推荐由 OpenClaw 宿主模型执行“两段式”：
+
+1. **采集输入**
+   ```bash
+   npx tsx scripts/pipeline.ts --collect
+   ```
+   结果会输出并写入 `data/cache/pipeline/pending-latest.json`（含 `modelInput`）。
+
+2. **宿主模型总结**
+   - 读取 `modelInput`
+   - 生成 1 条中文推文正文（100~140 字，不加 emoji/hashtag，不编造）
+
+3. **发布**
+   ```bash
+   npx tsx scripts/pipeline.ts --publish --text "这里粘贴宿主模型生成的中文推文"
+   ```
+
+发布后会写审计文件到 `data/cache/pipeline/host-publish-*.json`。
+
+---
+
+## 5. 单功能测试命令
+
+- 搜索测试：`npx tsx scripts/tools/search-tweets.ts`
+- 趋势测试：`npx tsx scripts/tools/get-trends.ts`
+- 发帖测试：`npx tsx scripts/tools/creat-post.ts`
+- 趋势采集+缓存：`npx tsx scripts/find-trend.ts`
+
+---
+
+## 6. 说明
+
+- `search all` 需要 full-archive 权限；无权限会返回 403。  
+- `pipeline.ts` 不直接调用第三方模型 API，总结由宿主模型完成（见 `SKILL.md` 自动化规范）。
+
+---
+
+## 7. License
 
 Apache-2.0

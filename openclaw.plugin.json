@@ -2,12 +2,16 @@
   "id": "x-intelligent-publisher",
   "name": "X 自动发帖",
   "version": "1.0.0",
-  "description": "采集 X 推文 → 按偏好与风格加工 → 发布。依赖官方 X API（OAuth 2.0 用户上下文）与可选 OpenAI。",
+  "description": "X API v2 双鉴权：App-only Bearer 用于搜索（recent/all），OAuth 2.0 用户上下文用于发帖与用户态接口。",
   "skills": ["."],
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
     "properties": {
+      "appBearerToken": {
+        "type": "string",
+        "description": "OAuth 2.0 Application-Only Bearer（搜索接口）"
+      },
       "oauth2AccessToken": {
         "type": "string",
         "description": "OAuth 2.0 User Access Token（Bearer）"

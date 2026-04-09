@@ -1,7 +1,7 @@
 {
   "id": "x-intelligent-publisher",
   "name": "x自动发帖智能体",
-  "description": "自动收集资料，生成推文并发布到平台X上。",
+  "description": "X API v2 轻量模块：App-only Bearer 用于搜索，OAuth 2.0 User Context 用于发帖与用户态接口。",
   "version": "1.0.0",
   "author": "Bai",
   "type": "script",

@@ -24,3 +24,4 @@ Thumbs.db
 # 编辑器（按需取消注释）
 .vscode/
 .idea/
+.cursor/

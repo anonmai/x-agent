@@ -1,58 +1,61 @@
 ---
 name: x-intelligent-publisher
 description: >-
-  Fetches tweets from X (search/timeline), filters and rewrites by
-  preferences and style templates, then posts. Use for OpenClaw X 自动发帖、推文流水线。
+  OpenClaw-hosted auto publishing skill for X API v2. Search uses App-only Bearer;
+  posting uses OAuth 2.0 User Context. Summary generation must use host model ability.
 metadata:
   openclaw:
     emoji: "📰"
     requires:
       env:
+        - X_APP_BEARER_TOKEN
         - X_OAUTH2_ACCESS_TOKEN
-    primaryEnv: X_OAUTH2_ACCESS_TOKEN
+    primaryEnv: X_APP_BEARER_TOKEN
     install:
       - id: npm
         kind: node
         label: npm install（仓库根目录）
 ---
 
-# X 自动发帖（x-publisher）
+# X 集成（x-publisher）
 
-三步 CLI，均在**仓库根目录**执行（需先 `npm install`）。
+本技能支持“宿主模型自动化编排”：先抓取趋势和推文，再由 OpenClaw 宿主模型完成中文总结，最后自动发帖。
 
-## 1. 采集
+## 能力概览
 
-- **推荐**：`search` 得到可加工的推文数组（写入时间分目录，如 `data/cache/fetched-tweets/20260408-183522.json`）。
-- `timeline`：需 `--user`，可为**数字用户 ID**，或 **`@用户名` / 用户名**（脚本会调用 v2 解析 ID，需 `users.read`）。
+- **`scripts/x-client.ts`**：`createAppOnlyClient()`（搜索用 App-only Bearer）；`TwitterClient.create()`（User Context，401 refresh 回写 `.env`）。
+- **`scripts/find-trend.ts`**：获取美国 Top1 趋势并抓取 10 条推文，写入缓存。
+- **`scripts/pipeline.ts`**：两段式编排器（collect -> host model summarize -> publish）。
+- **`scripts/tools/creat-post.ts`**：`createPost(...)` 发帖能力（User Context）。
 
-```bash
-npx tsx scripts/fetch-tweets.ts --source search --topic "AI -is:retweet lang:en" --count 20
-```
+## 身份验证
 
-## 2. 加工
+在 `.env` 至少配置 **`X_APP_BEARER_TOKEN`**（搜索接口）。发帖/用户态接口需配置 **`X_OAUTH2_ACCESS_TOKEN`**，或 **`X_CLIENT_ID` + `X_OAUTH2_REFRESH_TOKEN`**（及保密应用的 **`X_CLIENT_SECRET`**）。详见 `.env.example`。
 
-读取 `config/preferences.json` 与 `config/style-templates.json`，输出 `data/cache/processed-tweets.json`（字段含 `processedText`）。
+## OpenClaw 自动化执行规范（重点）
 
-```bash
-npx tsx scripts/process-tweet.ts -i data/cache/fetched-tweets.json -s professional
-```
+执行任务“基于趋势自动总结并发布”时，必须按以下流程：
 
-风格：`professional` | `casual` | `humorous` | `thread`。无 `OPENAI_API_KEY` 时用简单规则降级。
+1. **采集阶段（工具动作）**
+   - 运行：`npx tsx scripts/pipeline.ts --collect`
+   - 读取终端中 `MODEL_INPUT_START` 和 `MODEL_INPUT_END` 之间的内容（或读取 `data/cache/pipeline/pending-latest.json` 中的 `modelInput`）。
 
-## 3. 发布
+2. **总结阶段（宿主模型动作，不调用外部 OpenAI SDK）**
+   - 使用 OpenClaw 宿主模型直接总结，严格遵守：
+     - 只输出 1 条中文推文正文；
+     - 100~140 字；
+     - 不编造、不过度推断；
+     - 不使用 emoji，不加 hashtag，不加解释文本；
+     - 若信息冲突，采用保守表述（如“多条消息显示…”）。
 
-```bash
-npx tsx scripts/publish-tweet.ts -i data/cache/processed-tweets.json --index 0 --dry-run
-```
+3. **发布阶段（工具动作）**
+   - 把上一步模型产出的正文作为参数发布：
+     - `npx tsx scripts/pipeline.ts --publish --text "<模型生成的中文推文>"`
 
-去掉 `--dry-run` 即真实发帖。遵守 X 开发者条款；自动化前建议人工确认正文。
+4. **失败处理**
+   - 若发布失败，不要重复生成；优先复用同一条正文重试一次。
+   - 若错误为鉴权/权限问题，先提示检查 `X_OAUTH2_ACCESS_TOKEN` 或 refresh 配置。
 
-## 身份验证（OAuth 2.0）
-
-在 `.env` 中配置 **`X_OAUTH2_ACCESS_TOKEN`**（用户授权得到的 Bearer access token，需包含发帖/读推等对应 scope）。也可不填 access token，改为配置 **`X_CLIENT_ID`** + **`X_OAUTH2_REFRESH_TOKEN`**（授权时含 `offline.access`），保密应用另配 **`X_CLIENT_SECRET`**，运行时会先刷新再请求。
-
-本仓库仅使用 **API v2**（`search` / `timeline` / 发帖）。
-
-## 与 Clawbird 的关系
-
-若已安装 **clawbird** 插件，搜帖/发帖也可用其工具；本技能提供**可脚本化、落盘缓存**的整条流水线，便于批处理与自定义 `preferences` / `style-templates`。
+### 约束
+- 禁止在自动流程中直接调用第三方模型 API（例如脚本内 OpenAI SDK）完成总结。
+- 总结任务必须由 OpenClaw 宿主模型能力执行。

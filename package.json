@@ -3,11 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "scripts": {
-    "fetch": "tsx scripts/fetch-tweets.ts",
-    "process": "tsx scripts/process-tweet.ts",
-    "publish": "tsx scripts/publish-tweet.ts"
-  },
+  "scripts": {},
   "dependencies": {
     "chalk": "^5.6.2",
     "commander": "^12.1.0",

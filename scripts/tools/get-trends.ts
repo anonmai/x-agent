@@ -113,8 +113,11 @@ function isRunAsMainScript(): boolean {
  */
 async function main(): Promise<void> {
   const { createAppOnlyClient } = await import('../x-client.js');
-  const woeid = 23424977
-  const requested = 10
+  const woeid = Number.parseInt(process.env.TRENDS_WOEID ?? '1', 10);
+  const requested = Number.parseInt(
+    process.env.TRENDS_MAX ?? String(TRENDS_DEFAULT_RESULTS),
+    10,
+  );
 
   const client = createAppOnlyClient();
   const { data } = await getTrendsByWoeid(client, woeid, requested);
@@ -130,7 +133,7 @@ async function main(): Promise<void> {
 
   data.forEach((trend, idx) => {
     const name = trend.trend_name ?? '(unknown)';
-    const count = trend.tweet_count
+    const count =
       typeof trend.tweet_count === 'number' ? trend.tweet_count.toString() : 'n/a';
     console.log(`${idx + 1}. ${name} (tweet_count=${count})`);
   });

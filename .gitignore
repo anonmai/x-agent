@@ -10,6 +10,7 @@ dist/
 
 # 运行时缓存与日志
 data/
+cache/
 *.log
 npm-debug.log*
 
@@ -25,3 +26,4 @@ Thumbs.db
 .vscode/
 .idea/
 .cursor/
+.trae/

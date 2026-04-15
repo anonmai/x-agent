@@ -1,113 +1,115 @@
-/**
- * 趋势到内容的最小流水线（基于现有工具）：
- * 1) 获取美国（WOEID=23424977）当前最热趋势（Top 1）
- * 2) 使用全量搜索抓取该趋势的 10 条推文
- * 3) 将结果落盘到 data/cache
- *
- * 依赖模块：
- * - `tools/get-trends.ts`：按 WOEID 拉趋势
- * - `tools/search-tweets.ts`：full-archive 搜索
- * - `x-client.ts`：App-only Bearer 客户端
- */
-
-import fs from 'fs/promises';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import { createAppOnlyClient } from './x-client.js';
+import { createAppOnlyClient, TwitterClient } from './x-client.js';
 import { getTrendsByWoeid } from './tools/get-trends.js';
-import { searchAllTweets } from './tools/search-tweets.js';
+import { searchRecentTweets } from './tools/search-tweets.js';
+import { summarizeTweets } from './tools/summarize-tweets.js';
+import { generatePost } from './tools/generate-post.js';
+import { createPost } from './tools/create-post.js';
+import { config, validateConfig } from './config.js';
 
-/** 美国的 WOEID（United States） */
-const US_WOEID = 23424977;
-/** 需求要求：全局搜索返回 10 条 */
-const HOT_TWEETS_COUNT = 10;
-
-type FindTrendResult = {
-  woeid: number;
+interface TrendResult {
   trendName: string;
-  searchQuery: string;
   tweets: unknown[];
-  savedFile: string;
-  fetchedAt: string;
-};
-
-/**
- * 生成紧凑时间戳，用于缓存文件名，便于按时间定位结果。
- */
-function timestampForFile(date: Date = new Date()): string {
-  const p = (n: number) => String(n).padStart(2, '0');
-  return (
-    `${date.getFullYear()}${p(date.getMonth() + 1)}${p(date.getDate())}-` +
-    `${p(date.getHours())}${p(date.getMinutes())}${p(date.getSeconds())}`
-  );
+  summary: string;
+  post: string;
+  postId: string;
 }
 
-/**
- * 运行完整流程并写入缓存文件。
- */
-export async function findUsTopTrendAndSave(): Promise<FindTrendResult> {
-  const client = createAppOnlyClient();
-
-  // Step 1: 只取 Top 1 趋势。
-  const trends = await getTrendsByWoeid(client, US_WOEID, 1);
-  const topTrend = trends.data[0]?.trend_name?.trim();
-  if (!topTrend) {
-    throw new Error('未获取到美国趋势 Top 1（trend_name 为空）');
-  }
-
-  // Step 2: 全局搜索该趋势（去掉转推，减少噪声）。
-  const query = `"${topTrend}" -is:retweet`;
-  const searched = await searchAllTweets(client, query, HOT_TWEETS_COUNT);
-
-  // Step 3: 落盘缓存。
-  const __dirname = path.dirname(fileURLToPath(import.meta.url));
-  const cacheDir = path.join(__dirname, '../data/cache/us-top-trend');
-  await fs.mkdir(cacheDir, { recursive: true });
-
-  const fetchedAt = new Date().toISOString();
-  const fileName = `${timestampForFile()}.json`;
-  const filePath = path.join(cacheDir, fileName);
-
-  const payload: FindTrendResult = {
-    woeid: US_WOEID,
-    trendName: topTrend,
-    searchQuery: query,
-    tweets: searched.data,
-    savedFile: filePath,
-    fetchedAt,
-  };
-
-  await fs.writeFile(filePath, JSON.stringify(payload, null, 2), 'utf-8');
-  return payload;
-}
-
-function isRunAsMainScript(): boolean {
-  const entry = process.argv[1];
-  if (!entry) return false;
+export async function findAndProcessTrend(): Promise<TrendResult> {
+  // 验证配置
+  validateConfig();
+  
   try {
-    return path.resolve(entry) === path.resolve(fileURLToPath(import.meta.url));
-  } catch {
-    return false;
+    console.log('=== 开始趋势发现和处理 ===');
+    
+    // 1. 获取趋势
+    console.log('步骤1: 获取当前趋势');
+    const appOnlyClient = createAppOnlyClient();
+    const trendsResult = await getTrendsByWoeid(
+      appOnlyClient,
+      config.trends.woeid,
+      config.trends.maxTrends
+    );
+    
+    if (trendsResult.data.length === 0) {
+      throw new Error('未获取到趋势数据');
+    }
+    
+    // 选择指定索引的趋势
+    const selectedTrend = trendsResult.data[config.trends.selectedTrendIndex];
+    if (!selectedTrend || !selectedTrend.trend_name) {
+      throw new Error('选中的趋势无效');
+    }
+    
+    const trendName = selectedTrend.trend_name;
+    console.log(`选中的趋势: ${trendName}`);
+    
+    // 2. 搜索相关推文
+    console.log('步骤2: 搜索相关推文');
+    const searchResult = await searchRecentTweets(
+      appOnlyClient,
+      trendName,
+      config.search.maxResults
+    );
+    
+    if (searchResult.data.length === 0) {
+      throw new Error('未搜索到相关推文');
+    }
+    
+    console.log(`搜索到 ${searchResult.data.length} 条相关推文`);
+    
+    // 3. 总结推文
+    console.log('步骤3: 总结推文内容');
+    const summaryResult = await summarizeTweets({
+      tweets: searchResult.data as any[],
+      trendName
+    });
+    
+    console.log('推文总结完成');
+    
+    // 4. 生成短推文
+    console.log('步骤4: 生成短推文');
+    const postResult = await generatePost({
+      summaryPath: summaryResult.summaryPath
+    });
+    
+    console.log('生成的推文:', postResult.post);
+    console.log('推文长度:', postResult.post.length);
+    
+    // 5. 发布推文
+    console.log('步骤5: 发布推文');
+    const twitterClient = await TwitterClient.create();
+    const createResult = await createPost(twitterClient, {
+      text: postResult.post
+    });
+    
+    console.log('推文发布成功，ID:', createResult.id);
+    
+    console.log('=== 趋势处理完成 ===');
+    
+    return {
+      trendName,
+      tweets: searchResult.data,
+      summary: summaryResult.summary,
+      post: postResult.post,
+      postId: createResult.id
+    };
+  } catch (error) {
+    console.error('处理趋势时出错:', error);
+    throw error;
   }
 }
 
-/**
- * 测试主函数：
- * - 执行完整流程
- * - 在终端打印趋势名、推文数、缓存文件路径
- */
+// 主函数
 async function main(): Promise<void> {
-  const result = await findUsTopTrendAndSave();
-  console.log('findUsTopTrendAndSave success');
-  console.log(`trend: ${result.trendName}`);
-  console.log(`query: ${result.searchQuery}`);
-  console.log(`tweets: ${result.tweets.length}`);
-  console.log(`savedFile: ${result.savedFile}`);
+  try {
+    await findAndProcessTrend();
+  } catch (error) {
+    console.error('执行失败:', error);
+    process.exitCode = 1;
+  }
 }
 
-if (isRunAsMainScript()) {
-  main().catch((e) => {
-    console.error('find-trend failed:', e);
-    process.exitCode = 1;
-  });
+// 仅在直接执行时运行
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main();
 }

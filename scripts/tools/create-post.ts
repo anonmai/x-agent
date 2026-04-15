@@ -25,6 +25,7 @@ import { TwitterClient } from '../x-client.js';
 export type CreatePostInput = {
   text: string;
   replyToTweetId?: string;
+  dryRun?: boolean;
 };
 
 /**
@@ -66,6 +67,15 @@ export async function createPost(
   input: CreatePostInput,
 ): Promise<CreatePostResult> {
   const payload = toTweetPayload(input);
+
+  // 如果是dry-run模式，直接返回模拟结果
+  if (input.dryRun) {
+    console.log('Dry-run mode: Skipping actual tweet posting');
+    return {
+      id: 'dry-run-id-' + Date.now(),
+      text: payload.text,
+    };
+  }
 
   const result = await client.withAuthRetry(async (rw: TwitterApiReadWrite) => {
     if (payload.options) {

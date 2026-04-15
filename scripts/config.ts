@@ -70,7 +70,7 @@ export const config: Config = {
   
   search: {
     maxResults: Number(process.env.SEARCH_MAX_RESULTS || 50),
-    mode: (process.env.SEARCH_MODE || 'recent') as 'recent' | 'all',
+    mode: (process.env.SEARCH_MODE || 'all') as 'recent' | 'all',
   },
   
   cache: {

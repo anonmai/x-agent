@@ -20,6 +20,7 @@ type PipelineOutput = {
   postedAt: string;
   generatedText: string;
   summaryPath: string;
+  dryRun: boolean;
 };
 
 function isRunAsMainScript(): boolean {
@@ -41,9 +42,9 @@ function isRunAsMainScript(): boolean {
  * 5. 发布推文
  * 6. 落盘审计
  */
-export async function runPipeline(): Promise<PipelineOutput> {
+export async function runPipeline(dryRun = false): Promise<PipelineOutput> {
   // 执行趋势处理
-  const result = await findAndProcessTrend();
+  const result = await findAndProcessTrend(dryRun);
   
   // 落盘审计
   const now = new Date();
@@ -53,6 +54,7 @@ export async function runPipeline(): Promise<PipelineOutput> {
     postedAt: now.toISOString(),
     generatedText: result.post,
     summaryPath: `${result.trendName}_${now.toISOString().replace(/[:.]/g, '-')}_summary.md`,
+    dryRun: dryRun,
   };
   
   // 确保审计目录存在
@@ -80,8 +82,10 @@ export async function runPipeline(): Promise<PipelineOutput> {
  * npx tsx scripts/pipeline.ts
  */
 async function main(): Promise<void> {
+  const dryRun = process.argv.includes('--dry-run');
+  
   try {
-    await runPipeline();
+    await runPipeline(dryRun);
   } catch (error) {
     console.error('Pipeline failed:', error);
     process.exitCode = 1;

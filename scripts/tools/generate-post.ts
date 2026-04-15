@@ -22,8 +22,10 @@ export async function generatePost(input: GeneratePostInput): Promise<GeneratePo
 1. 长度不超过280字符，最好在250字符以上
 2. ${style}
 3. 主要介绍Trend的核心内容
-4，包含该Trend的标签
-5. 适当加入相关公众言论
+4. 在开头加上[Trend名称]，其中这个Trend名称是总结中提到的趋势名称
+5. 不要使用任何标签
+6. 适当加入相关公众言论
+7. 禁止敏感的宗教、政治、极端言论
 
 总结内容：
 ${summary}`;

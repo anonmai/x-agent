@@ -1,6 +1,6 @@
 import { createAppOnlyClient, TwitterClient } from './x-client.js';
 import { getTrendsByWoeid } from './tools/get-trends.js';
-import { searchRecentTweets } from './tools/search-tweets.js';
+import { searchAllTweets } from './tools/search-tweets.js';
 import { summarizeTweets } from './tools/summarize-tweets.js';
 import { generatePost } from './tools/generate-post.js';
 import { createPost } from './tools/create-post.js';
@@ -14,7 +14,7 @@ interface TrendResult {
   postId: string;
 }
 
-export async function findAndProcessTrend(): Promise<TrendResult> {
+export async function findAndProcessTrend(dryRun = false): Promise<TrendResult> {
   // 验证配置
   validateConfig();
   
@@ -45,7 +45,7 @@ export async function findAndProcessTrend(): Promise<TrendResult> {
     
     // 2. 搜索相关推文
     console.log('步骤2: 搜索相关推文');
-    const searchResult = await searchRecentTweets(
+    const searchResult = await searchAllTweets(
       appOnlyClient,
       trendName,
       config.search.maxResults
@@ -76,13 +76,14 @@ export async function findAndProcessTrend(): Promise<TrendResult> {
     console.log('推文长度:', postResult.post.length);
     
     // 5. 发布推文
-    console.log('步骤5: 发布推文');
+    console.log(`步骤5: ${dryRun ? 'Dry-run 模式 - 模拟' : ''}发布推文`);
     const twitterClient = await TwitterClient.create();
     const createResult = await createPost(twitterClient, {
-      text: postResult.post
+      text: postResult.post,
+      dryRun: dryRun
     });
     
-    console.log('推文发布成功，ID:', createResult.id);
+    console.log(`${dryRun ? 'Dry-run 模式 - ' : ''}推文发布成功，ID:`, createResult.id);
     
     console.log('=== 趋势处理完成 ===');
     

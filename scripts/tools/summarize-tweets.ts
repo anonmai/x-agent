@@ -126,8 +126,8 @@ ${input.tweets.map(tweet => `- ${tweet.text}`).join('\n')}`;
     // 保存总结到文件
     await fs.writeFile(summaryPath, summary);
     
-    // 删除缓存的推文文件
-    await fs.unlink(tweetsCachePath);
+    // 删除缓存的推文文件（已注释掉，保留缓存文件）
+    // await fs.unlink(tweetsCachePath);
     
     return {
       summary,
@@ -136,7 +136,8 @@ ${input.tweets.map(tweet => `- ${tweet.text}`).join('\n')}`;
   } catch (error) {
     console.error('Error summarizing tweets:', error);
     
-    // 清理缓存文件
+    // 清理缓存文件（已注释掉，保留缓存文件）
+    /*
     try {
       if (await fs.access(tweetsCachePath).then(() => true).catch(() => false)) {
         await fs.unlink(tweetsCachePath);
@@ -144,6 +145,7 @@ ${input.tweets.map(tweet => `- ${tweet.text}`).join('\n')}`;
     } catch (cleanupError) {
       console.error('Error cleaning up cache:', cleanupError);
     }
+    */
     
     throw error;
   }

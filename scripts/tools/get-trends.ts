@@ -15,6 +15,7 @@
 import path from 'path';
 import { fileURLToPath } from 'url';
 import type { TwitterApi } from 'twitter-api-v2';
+import { isRunAsMainScript } from '../utils.js';
 
 /** max_trends 文档约束下限 */
 export const TRENDS_MIN_RESULTS = 1;
@@ -86,19 +87,6 @@ export async function getTrendsByWoeid(
   });
 
   return { data: trendsFromResponse(result) };
-}
-
-/**
- * 判断当前文件是否被直接运行（而非作为库被 import）。
- */
-function isRunAsMainScript(): boolean {
-  const entry = process.argv[1];
-  if (!entry) return false;
-  try {
-    return path.resolve(entry) === path.resolve(fileURLToPath(import.meta.url));
-  } catch {
-    return false;
-  }
 }
 
 /**

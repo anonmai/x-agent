@@ -13,6 +13,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { findAndProcessTrend } from './find-trend.js';
 import { config } from './config.js';
+import { isRunAsMainScript } from './utils.js';
+
 
 type PipelineOutput = {
   trendName: string;
@@ -22,16 +24,6 @@ type PipelineOutput = {
   summaryPath: string;
   dryRun: boolean;
 };
-
-function isRunAsMainScript(): boolean {
-  const entry = process.argv[1];
-  if (!entry) return false;
-  try {
-    return path.resolve(entry) === path.resolve(fileURLToPath(import.meta.url));
-  } catch {
-    return false;
-  }
-}
 
 /**
  * 完整的趋势处理流水线：

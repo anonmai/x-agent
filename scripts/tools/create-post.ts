@@ -12,10 +12,9 @@
  * 3) 保持与仓库现有鉴权层（scripts/x-client.ts）一致。
  */
 
-import path from 'path';
-import { fileURLToPath } from 'url';
 import type { TwitterApiReadWrite } from 'twitter-api-v2';
 import { TwitterClient } from '../x-client.js';
+import { isRunAsMainScript } from '../utils.js';
 
 /**
  * 发帖请求参数（当前实现的最小子集）。
@@ -88,20 +87,6 @@ export async function createPost(
     id: result.data.id,
     text: payload.text,
   };
-}
-
-/**
- * 判断当前文件是否被“直接执行”，而不是被 import。
- * 这样可避免把库函数引入时误触发真实发帖。
- */
-function isRunAsMainScript(): boolean {
-  const entry = process.argv[1];
-  if (!entry) return false;
-  try {
-    return path.resolve(entry) === path.resolve(fileURLToPath(import.meta.url));
-  } catch {
-    return false;
-  }
 }
 
 /**

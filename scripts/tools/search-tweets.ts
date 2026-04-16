@@ -14,9 +14,8 @@
  * 本地连通性自测（真实请求 X API）：`npx tsx scripts/tools/search-tweets.ts`（需已配置 `.env`）
  */
 
-import path from 'path';
-import { fileURLToPath } from 'url';
 import type { TwitterApi } from 'twitter-api-v2';
+import { isRunAsMainScript } from '../utils.js';
 
 const searchTweetFields = ['created_at', 'public_metrics', 'author_id'] as const;
 const searchExpansions = ['author_id'] as const;
@@ -149,24 +148,8 @@ export async function searchAllTweets(
 // 以下为测试代码
 
 /**
- * 判断当前文件是否被“直接执行”。
- * - true：例如 `npx tsx scripts/tools/search-tweets.ts`
- * - false：被其它模块 `import` 时
- *
- * 这样可让本文件同时具备：
- * 1) 库函数模块（导出搜索函数）
- * 2) 可手动运行的诊断脚本（main）
+ * 主函数（仅当直接运行本脚本时执行）
  */
-function isRunAsMainScript(): boolean {
-  const entry = process.argv[1];
-  if (!entry) return false;
-  try {
-    return path.resolve(entry) === path.resolve(fileURLToPath(import.meta.url));
-  } catch {
-    return false;
-  }
-}
-
 async function main(): Promise<void> {
   const { createAppOnlyClient } = await import('../x-client.js');
   const query = 'Openclaw -is:retweet';
